@@ -3,23 +3,26 @@ import geopandas as gpd
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
 
-load_dotenv()
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+env_path = os.path.join(project_root, 'var.env')
 
-POSTGRES_USER = os.getenv('POSTGRES_USER')
-POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD')
-POSTGRES_DB = os.getenv('POSTGRES_DB')
-POSTGRES_HOST = os.getenv('POSTGRES_HOST')
-POSTGRES_PORT = os.getenv('POSTGRES_PORT')
+load_dotenv(dotenv_path=env_path)
 
-SHAPEFILE_PATH = os.getenv('SHAPEFILE_PATH')
-CDL_BASE_PATH = os.getenv('CDL_BASE_PATH')
-CDL_YEARS = list(map(int, os.getenv('CDL_YEARS').split(',')))
+DB_NAME = os.getenv('DB_NAME')
+DB_USER = os.getenv('DB_USER')
+DB_PASSWORD = os.getenv('DB_PASSWORD')
+DB_HOST = os.getenv('DB_HOST')
+DB_PORT = os.getenv('DB_PORT')
+
+SHAPEFILE_PATH=os.path.join(project_root, 'data/admin1/ne_10m_admin_1_states_provinces.shp')
+CDL_BASE_PATH=os.path.join(project_root, 'data/CDL')
+CDL_YEARS= [2020,2021,2022,2023]
 
 
 def connect_to_db():
     """Creates a connection to the PostgreSQL/PostGIS database."""
     engine = create_engine(
-        f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+        f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     )
     try:
         with engine.connect() as conn:
@@ -34,6 +37,7 @@ def load_vector_data(engine):
     """Loads vector data from the Natural Earth shapefile into the PostGIS database."""
     try:
         states_gdf = gpd.read_file(SHAPEFILE_PATH)
+        states_gdf = states_gdf.to_crs(epsg=4326)
         states_gdf.to_postgis('us_states', engine, if_exists='replace', index=False)
         print("Vector data loaded successfully.")
     except Exception as e:
@@ -45,8 +49,8 @@ def load_raster_data():
     for year in CDL_YEARS:
         cdl_path = os.path.join(CDL_BASE_PATH, f"{year}_30m_cdls/{year}_30m_cdls.tif")
         gdal_cmd = (
-            f"raster2pgsql -s 4326 -I -C -e -M -t 500x500 {cdl_path} public.cdl_{year} "
-            f"| PGPASSWORD={POSTGRES_PASSWORD} psql -d {POSTGRES_DB} -U {POSTGRES_USER} -h {POSTGRES_HOST} -p {POSTGRES_PORT}"
+            f"raster2pgsql -s 5070 -I -C -e -M -t 500x500 {cdl_path} public.cdl_{year} "
+            f"| PGPASSWORD={DB_PASSWORD} psql -d {DB_NAME} -U {DB_USER} -h {DB_HOST} -p {DB_PORT}"
         )
         try:
             os.system(gdal_cmd)
